@@ -36,23 +36,28 @@ jobs:
         run: |
           short_sha=$(git rev-parse --short ${{ github.sha }})
           echo "TAG=${{ inputs.registry }}:${{ inputs.tag_prefix }}${short_sha}" >> "$GITHUB_ENV"
+          echo "TAG=${{ inputs.registry }}:${{ inputs.tag_prefix }}${short_sha}"
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
           platforms: linux/${{ inputs.platform }}
           context: ${{ inputs.context || '.' }}
           push: false
-          tags: ${{ env.TAG }}
+          tags: 
+          
           cache-from: type=gha,scope=computer-use-${{ inputs.platform }}
           cache-to: type=gha,mode=max,scope=computer-use-${{ inputs.platform }}
           load: true
       - name: Run container
-        run: docker run -d -p 8051:8051 ${{ env.TAG }}
+        run: |
+          source "$GITHUB_ENV"
+          docker run -d -p 8051:8051 $TAG
       - name: Check streamlit
         run: |
           timeout=60
           start_time=$(date +%s)
-          docker_id=$(docker ps --filter "ancestor=${{ env.TAG }}" --format "{{.ID}}")
+          source "$GITHUB_ENV"
+          docker_id=$(docker ps --filter "ancestor=$TAG" --format "{{.ID}}")
           echo "docker_id=$docker_id" >> "$GITHUB_ENV"
           while true; do
             current_time=$(date +%s)
@@ -82,10 +87,12 @@ jobs:
           fi
       - name: Push Docker image
         uses: docker/build-push-action@v5
+        env:
+          TAG: ${{ env.TAG }}
         with:
           platforms: linux/${{ inputs.platform }}
           context: ${{ inputs.context || '.' }}
           push: true
-          tags: ${{ env.PUSH_TAGS }}
+          tags: ${{ env.TAG }}-${{ inputs.platform }},${{ env.TAG }},${{ inputs.registry }}:${{ inputs.tag_prefix }}latest-${{ inputs.platform }}
           cache-from: type=gha,scope=computer-use-${{ inputs.platform }}
           cache-to: type=gha,mode=max,scope=computer-use-${{ inputs.platform }}
